@@ -1,15 +1,10 @@
 #include "Scene.h"
 
-CScene::CScene()
-{
-}
+CScene::CScene() {}
 
-CScene::~CScene()
-{
-}
+CScene::~CScene() {}
 
-ID3D12RootSignature* CScene::CreateGraphicsRootSignature(ID3D12Device* pd3dDevice)
-{
+ID3D12RootSignature* CScene::CreateGraphicsRootSignature(ID3D12Device* pd3dDevice) {
 	ID3D12RootSignature* pd3dGraphicsRootSignature = NULL;
 	D3D12_ROOT_PARAMETER pd3dRootParameters[2];
 	pd3dRootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
@@ -37,18 +32,15 @@ ID3D12RootSignature* CScene::CreateGraphicsRootSignature(ID3D12Device* pd3dDevic
 	d3dRootSignatureDesc.Flags = d3dRootSignatureFlags;
 	ID3DBlob* pd3dSignatureBlob = NULL;
 	ID3DBlob* pd3dErrorBlob = NULL;
-	::D3D12SerializeRootSignature(&d3dRootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		&pd3dSignatureBlob, &pd3dErrorBlob);
-	pd3dDevice->CreateRootSignature(0, pd3dSignatureBlob->GetBufferPointer(),
-		pd3dSignatureBlob->GetBufferSize(), __uuidof(ID3D12RootSignature), (void
-			**)&pd3dGraphicsRootSignature);
+	::D3D12SerializeRootSignature(&d3dRootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &pd3dSignatureBlob, &pd3dErrorBlob);
+	pd3dDevice->CreateRootSignature(0, pd3dSignatureBlob->GetBufferPointer(), pd3dSignatureBlob->GetBufferSize(),
+		__uuidof(ID3D12RootSignature), (void**)&pd3dGraphicsRootSignature);
 	if (pd3dSignatureBlob) pd3dSignatureBlob->Release();
 	if (pd3dErrorBlob) pd3dErrorBlob->Release();
 	return(pd3dGraphicsRootSignature);
 }
 
-void CScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList)
-{
+void CScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList) {
 	m_pd3dGraphicsRootSignature = CreateGraphicsRootSignature(pd3dDevice);
 	m_nShaders = 1;
 	m_pShaders = new CObjectsShader[m_nShaders];
@@ -56,51 +48,44 @@ void CScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* p
 	m_pShaders[0].BuildObjects(pd3dDevice, pd3dCommandList);
 }
 
-void CScene::ReleaseObjects()
-{
+void CScene::ReleaseObjects() {
 	if (m_pd3dGraphicsRootSignature) m_pd3dGraphicsRootSignature->Release();
-	for (int i = 0; i < m_nShaders; i++)
-	{
+	for (int i = 0; i < m_nShaders; i++) {
 		m_pShaders[i].ReleaseShaderVariables();
 		m_pShaders[i].ReleaseObjects();
 	}
 	if (m_pShaders) delete[] m_pShaders;
 }
 
-bool CScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM	lParam)
-{
-	return(false);
-}
-bool CScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
-{
+bool CScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM	lParam) {
 	return(false);
 }
 
-void CScene::AnimateObjects(float fTimeElapsed)
-{
-	for (int i = 0; i < m_nShaders; i++)
-	{
+bool CScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam) {
+	return(false);
+}
+
+void CScene::AnimateObjects(float fTimeElapsed) {
+	for (int i = 0; i < m_nShaders; i++) {
 		m_pShaders[i].AnimateObjects(fTimeElapsed);
 	}
 }
 
-void CScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
-{
+void CScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera) {
 	pCamera->SetViewportsAndScissorRects(pd3dCommandList);
 	pd3dCommandList->SetGraphicsRootSignature(m_pd3dGraphicsRootSignature);
 	pCamera->UpdateShaderVariables(pd3dCommandList);
-	for (int i = 0; i < m_nShaders; i++)
-	{
+	for (int i = 0; i < m_nShaders; i++) {
 		m_pShaders[i].Render(pd3dCommandList, pCamera);
 	}
 }
 
-void CScene::ReleaseUploadBuffers()
-{
-	for (int i = 0; i < m_nShaders; i++) m_pShaders[i].ReleaseUploadBuffers();
+void CScene::ReleaseUploadBuffers() {
+	for (int i = 0; i < m_nShaders; i++) {
+		m_pShaders[i].ReleaseUploadBuffers();
+	}
 }
 
-ID3D12RootSignature* CScene::GetGraphicsRootSignature()
-{
+ID3D12RootSignature* CScene::GetGraphicsRootSignature() {
 	return(m_pd3dGraphicsRootSignature);
 }

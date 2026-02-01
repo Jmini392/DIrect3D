@@ -1,10 +1,10 @@
 #pragma once
+
 #include "PCH.h"
 
 const ULONG MAX_SAMPLE_COUNT = 50; // 50회의 프레임 처리시간을 누적하여 평균한다.
 
-class CGameTimer
-{
+class CGameTimer {
 public:
 	CGameTimer();
 	virtual ~CGameTimer();
@@ -13,6 +13,7 @@ public:
 	void Stop() {}
 	void Reset();
 	void Tick(float fLockFPS = 0.0f);
+	
 	unsigned long GetFrameRate(LPTSTR lpszString = NULL, int nCharacters = 0);
 	float GetTimeElapsed();
 private:

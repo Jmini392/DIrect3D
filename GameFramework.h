@@ -1,12 +1,12 @@
 #pragma once
+
 #include "PCH.h"
 #include "Timer.h"
 #include "Scene.h"
 #include "Camera.h"
 #include "Player.h"
 
-class CGameFramework
-{
+class CGameFramework {
 private:
 	HINSTANCE m_hInstance;
 	HWND      m_hWnd;
@@ -30,7 +30,7 @@ private:
 
 	ID3D12Resource* m_pd3dDepthStencilBuffer;			// 깊이-스텐실 버퍼
 	ID3D12DescriptorHeap* m_pd3dDsvDescriptorHeap;		// 서술자 힙 인터페이스 포인터
-	UINT m_nDsvDescriptorIncrementSize;				// 깊이-스텐실 서술자 원소 크기
+	UINT m_nDsvDescriptorIncrementSize;					// 깊이-스텐실 서술자 원소 크기
 
 	ID3D12CommandQueue* m_pd3dCommandQueue;				// 명령 큐
 	ID3D12CommandAllocator* m_pd3dCommandAllocator;		// 명령 할당자
@@ -42,10 +42,9 @@ private:
 	UINT64 m_nFenceValue;								// 펜스 값
 	HANDLE m_hFenceEvent;								// 펜스 이벤트 핸들
 
-	//게임 프레임워크에서 사용할 타이머이다.
-	CGameTimer m_GameTimer;
-	//프레임 레이트를 주 윈도우의 캡션에 출력하기 위한 문자열이다.
-	_TCHAR m_pszFrameRate[50];
+	CGameTimer m_GameTimer;			//게임 프레임워크에서 사용할 타이머
+	
+	_TCHAR m_pszFrameRate[50];		//프레임 레이트를 주 윈도우의 캡션에 출력하기 위한 문자열
 public:
 	CGameFramework();
 	~CGameFramework();
@@ -77,14 +76,11 @@ public:
 	void ChangeSwapChainState();
 
 	void MoveToNextFrame();
+
 	UINT64 m_nFenceValues[m_nSwapChainBuffers];
-	CScene* m_pScene;
 
-	CCamera* m_pCamera = NULL;
-
-	//플레이어 객체에 대한 포인터이다.
-	CPlayer* m_pPlayer = NULL;
-	//마지막으로 마우스 버튼을 클릭할 때의 마우스 커서의 위치이다.
-	POINT m_ptOldCursorPos;
+	CScene* m_pScene;			// 씬 객체에 대한 포인터
+	CCamera* m_pCamera = NULL;	// 카메라 객체에 대한 포인터
+	CPlayer* m_pPlayer = NULL;	// 플레이어 객체에 대한 포인터
+	POINT m_ptOldCursorPos;		// 이전 마우스 커서 위치
 };
-

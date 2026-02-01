@@ -1,11 +1,11 @@
 #pragma once
+
 #include "Mesh.h"
 
 class CShader;
 class CCamera;
 
-class CGameObject
-{
+class CGameObject {
 public:
 	CGameObject();
 	virtual ~CGameObject();
@@ -30,6 +30,7 @@ public:
 
 	//상수 버퍼를 생성한다.
 	virtual void CreateShaderVariables(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList);
+	
 	//상수 버퍼의 내용을 갱신한다.
 	virtual void UpdateShaderVariables(ID3D12GraphicsCommandList* pd3dCommandList);
 	virtual void ReleaseShaderVariables();
@@ -39,19 +40,21 @@ public:
 	XMFLOAT3 GetLook();
 	XMFLOAT3 GetUp();
 	XMFLOAT3 GetRight();
+
 	//게임 객체의 위치를 설정한다.
 	void SetPosition(float x, float y, float z);
 	void SetPosition(XMFLOAT3 xmf3Position);
+	
 	//게임 객체를 로컬 x-축, y-축, z-축 방향으로 이동한다.
 	void MoveStrafe(float fDistance = 1.0f);
 	void MoveUp(float fDistance = 1.0f);
 	void MoveForward(float fDistance = 1.0f);
+	
 	//게임 객체를 회전(x-축, y-축, z-축)한다.
 	void Rotate(float fPitch = 10.0f, float fYaw = 10.0f, float fRoll = 10.0f);
 };
 
-class CRotatingObject : public CGameObject
-{
+class CRotatingObject : public CGameObject {
 public:
 	CRotatingObject();
 	virtual ~CRotatingObject();
