@@ -21,17 +21,11 @@
     <Filter Include="소스 파일\장면">
       <UniqueIdentifier>{5aa9ac2b-e0bc-46f9-a3fb-f522d0436afc}</UniqueIdentifier>
     </Filter>
+    <Filter Include="소스 파일\관리">
+      <UniqueIdentifier>{2c9af2ee-6030-4c0d-8dad-c8338ab22819}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Camera.h">
-      <Filter>소스 파일\장면</Filter>
-    </ClInclude>
-    <ClInclude Include="DIrect3D.h">
-      <Filter>소스 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="GameFramework.h">
-      <Filter>소스 파일\시스템</Filter>
-    </ClInclude>
     <ClInclude Include="GameObject.h">
       <Filter>소스 파일\오브젝트</Filter>
     </ClInclude>
@@ -59,14 +53,23 @@
     <ClInclude Include="targetver.h">
       <Filter>소스 파일\시스템</Filter>
     </ClInclude>
+    <ClInclude Include="Texture.h">
+      <Filter>소스 파일\랜더링</Filter>
+    </ClInclude>
+    <ClInclude Include="KeyManager.h">
+      <Filter>소스 파일\관리</Filter>
+    </ClInclude>
+    <ClInclude Include="GameFramework.h">
+      <Filter>소스 파일\관리</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>소스 파일\시스템</Filter>
+    </ClInclude>
+    <ClInclude Include="DIrect3D.h">
+      <Filter>소스 파일\시스템</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="DIrect3D.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="GameFramework.cpp">
-      <Filter>소스 파일\시스템</Filter>
-    </ClCompile>
     <ClCompile Include="Mesh.cpp">
       <Filter>소스 파일\랜더링</Filter>
     </ClCompile>
@@ -85,11 +88,23 @@
     <ClCompile Include="Player.cpp">
       <Filter>소스 파일\오브젝트</Filter>
     </ClCompile>
-    <ClCompile Include="Camera.cpp">
-      <Filter>소스 파일\장면</Filter>
-    </ClCompile>
     <ClCompile Include="Scene.cpp">
       <Filter>소스 파일\장면</Filter>
+    </ClCompile>
+    <ClCompile Include="Texture.cpp">
+      <Filter>소스 파일\랜더링</Filter>
+    </ClCompile>
+    <ClCompile Include="KeyManager.cpp">
+      <Filter>소스 파일\관리</Filter>
+    </ClCompile>
+    <ClCompile Include="GameFramework.cpp">
+      <Filter>소스 파일\관리</Filter>
+    </ClCompile>
+    <ClCompile Include="Camera.cpp">
+      <Filter>소스 파일\시스템</Filter>
+    </ClCompile>
+    <ClCompile Include="DIrect3D.cpp">
+      <Filter>소스 파일\시스템</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

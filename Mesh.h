@@ -24,6 +24,51 @@ public:
 	~CDiffusedVertex() {}
 };
 
+class CTexturedVertex : public CVertex {
+protected:
+	XMFLOAT2 m_xmf2TexCoord;
+public:
+	CTexturedVertex() { 
+		m_xmf3Position = XMFLOAT3(0.0f, 0.0f, 0.0f); 
+		m_xmf2TexCoord = XMFLOAT2(0.0f, 0.0f); 
+	}
+	CTexturedVertex(float x, float y, float z, XMFLOAT2 xmf2TexCoord) { 
+		m_xmf3Position = XMFLOAT3(x, y, z); 
+		m_xmf2TexCoord = xmf2TexCoord; 
+	}
+	CTexturedVertex(XMFLOAT3 xmf3Position, XMFLOAT2 xmf2TexCoord) { 
+		m_xmf3Position = xmf3Position; 
+		m_xmf2TexCoord = xmf2TexCoord; 
+	}
+	~CTexturedVertex() {}
+};
+
+class CTexturedNormalVertex : public CVertex {
+protected:
+	XMFLOAT3 m_xmf3Normal;
+	XMFLOAT2 m_xmf2TexCoord;
+public:
+	CTexturedNormalVertex() { 
+		m_xmf3Position = XMFLOAT3(0.0f, 0.0f, 0.0f);
+		m_xmf3Normal = XMFLOAT3(0.0f, 1.0f, 0.0f);
+		m_xmf2TexCoord = XMFLOAT2(0.0f, 0.0f); 
+	}
+	CTexturedNormalVertex(XMFLOAT3 xmf3Position, XMFLOAT3 xmf3Normal, XMFLOAT2 xmf2TexCoord) { 
+		m_xmf3Position = xmf3Position;
+		m_xmf3Normal = xmf3Normal;
+		m_xmf2TexCoord = xmf2TexCoord; 
+	}
+	~CTexturedNormalVertex() {}
+};
+
+// 서브메쉬 정보 구조체
+struct SubMeshInfo {
+	std::string strName;      // 메쉬 이름 (body, hair 등)
+	UINT nStartIndex;         // 인덱스 버퍼 시작 위치
+	UINT nIndexCount;         // 인덱스 개수
+	int nMaterialIndex;       // 재질 인덱스 (-1이면 없음)
+};
+
 class CMesh {
 public:
 	CMesh(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList);
@@ -45,6 +90,12 @@ protected:
 	UINT m_nOffset = 0;
 public:
 	virtual void Render(ID3D12GraphicsCommandList* pd3dCommandList);
+	virtual void Render(ID3D12GraphicsCommandList* pd3dCommandList, int nSubMeshIndex);
+	
+	// 서브메쉬 정보
+	int GetSubMeshCount() { return (int)m_vSubMeshes.size(); }
+	SubMeshInfo* GetSubMesh(int nIndex) { return (nIndex < (int)m_vSubMeshes.size()) ? &m_vSubMeshes[nIndex] : nullptr; }
+	
 protected:
 	ID3D12Resource* m_pd3dIndexBuffer = NULL;
 	ID3D12Resource* m_pd3dIndexUploadBuffer = NULL;
@@ -56,7 +107,9 @@ protected:
 	UINT m_nStartIndex = 0;
 	//인덱스 버퍼에서 메쉬를 그리기 위해 사용되는 시작 인덱스이다. 
 	int m_nBaseVertex = 0;
-	//인덱스 버퍼의 인덱스에 더해질 인덱스이다. 
+	
+	// 서브메쉬 목록
+	std::vector<SubMeshInfo> m_vSubMeshes;
 };
 
 class CTriangleMesh : public CMesh {
@@ -77,4 +130,36 @@ public:
 	CAirplaneMeshDiffused(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList,
 		float fWidth = 20.0f, float fHeight = 20.0f, float fDepth = 4.0f, XMFLOAT4 xmf4Color = XMFLOAT4(1.0f, 1.0f, 0.0f, 0.0f));
 	virtual ~CAirplaneMeshDiffused();
+};
+
+class CFBXMeshDiffused : public CMesh {
+public:
+	CFBXMeshDiffused(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList, const char* pstrFileName,
+		float fScale = 1.0f, XMFLOAT4 xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f));
+	virtual ~CFBXMeshDiffused();
+private:
+	void ProcessNode(FbxNode* pNode, std::vector<CDiffusedVertex>& vertices, std::vector<UINT>& indices, 
+		float fScale, XMFLOAT4& xmf4Color);
+	void ProcessMesh(FbxMesh* pMesh, std::vector<CDiffusedVertex>& vertices, std::vector<UINT>& indices, 
+		float fScale, XMFLOAT4& xmf4Color);
+private:
+	ID3D12Device* m_pd3dDevice = nullptr;
+	ID3D12GraphicsCommandList* m_pd3dCommandList = nullptr;
+	float m_fScale = 1.0f;
+};
+
+class CFBXMeshTextured : public CMesh {
+public:
+	CFBXMeshTextured(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList, const char* pstrFileName,
+		float fScale = 1.0f);
+	virtual ~CFBXMeshTextured();
+private:
+	void ProcessNode(FbxNode* pNode, std::vector<CTexturedNormalVertex>& vertices, std::vector<UINT>& indices, float fScale);
+	void ProcessMesh(FbxNode* pNode, FbxMesh* pMesh, std::vector<CTexturedNormalVertex>& vertices, std::vector<UINT>& indices, float fScale);
+	XMFLOAT2 GetUV(FbxMesh* pMesh, int nControlPointIndex, int nVertexCounter, int nUVIndex);
+	XMFLOAT3 GetNormal(FbxMesh* pMesh, int nControlPointIndex, int nVertexCounter);
+private:
+	ID3D12Device* m_pd3dDevice = nullptr;
+	ID3D12GraphicsCommandList* m_pd3dCommandList = nullptr;
+	float m_fScale = 1.0f;
 };

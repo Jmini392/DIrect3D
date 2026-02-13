@@ -23,7 +23,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    // TODO: 여기에 코드를 입력합니다.
+    // COM 초기화 (WIC 텍스처 로딩에 필요)
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
     // 전역 문자열을 초기화합니다.
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
@@ -49,6 +50,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
         else gGameFramework.FrameAdvance();
     }
     gGameFramework.OnDestroy();
+
+    // COM 해제
+    CoUninitialize();
 
     return (int)msg.wParam;
 }
@@ -121,7 +125,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_MOUSEMOVE:
         case WM_KEYDOWN:
         case WM_KEYUP:
-            gGameFramework.OnProcessingWindowMessage(hWnd, message, wParam, lParam);
+            gGameFramework.m_KeyManager.ProcessingMessage(hWnd, message, wParam, lParam);
             break;
         case WM_COMMAND: {
             int wmId = LOWORD(wParam);

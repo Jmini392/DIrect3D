@@ -25,7 +25,20 @@ void CMesh::Render(ID3D12GraphicsCommandList* pd3dCommandList) {
 		pd3dCommandList->DrawIndexedInstanced(m_nIndices, 1, 0, 0, 0);
 		//인덱스 버퍼가 있으면 인덱스 버퍼를 파이프라인(IA: 입력 조립기)에 연결하고 인덱스를 사용하여 렌더링한다.
 	}
-	else pd3dCommandList->DrawInstanced(m_nVertices, 1, m_nOffset, 0);
+	else {
+		pd3dCommandList->DrawInstanced(m_nVertices, 1, m_nOffset, 0);
+	}
+}
+
+void CMesh::Render(ID3D12GraphicsCommandList* pd3dCommandList, int nSubMeshIndex) {
+	pd3dCommandList->IASetPrimitiveTopology(m_d3dPrimitiveTopology);
+	pd3dCommandList->IASetVertexBuffers(m_nSlot, 1, &m_d3dVertexBufferView);
+	
+	if (m_pd3dIndexBuffer && nSubMeshIndex < (int)m_vSubMeshes.size()) {
+		pd3dCommandList->IASetIndexBuffer(&m_d3dIndexBufferView);
+		SubMeshInfo& subMesh = m_vSubMeshes[nSubMeshIndex];
+		pd3dCommandList->DrawIndexedInstanced(subMesh.nIndexCount, 1, subMesh.nStartIndex, 0, 0);
+	}
 }
 
 
@@ -214,3 +227,448 @@ CAirplaneMeshDiffused::CAirplaneMeshDiffused(ID3D12Device* pd3dDevice, ID3D12Gra
 }
 
 CAirplaneMeshDiffused::~CAirplaneMeshDiffused() {}
+
+
+//=============================================================================
+// FBX SDK를 사용한 애니메이션 지원 FBX 메쉬 생성
+//=============================================================================
+CFBXMeshDiffused::CFBXMeshDiffused(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList,
+	const char* pstrFileName, float fScale, XMFLOAT4 xmf4Color) : CMesh(pd3dDevice, pd3dCommandList) {
+
+	m_pd3dDevice = pd3dDevice;
+	m_pd3dCommandList = pd3dCommandList;
+	m_fScale = fScale;
+
+	OutputDebugStringA("=== CFBXMeshDiffused Constructor START (FBX SDK with Animation) ===\n");
+	OutputDebugStringA("File: ");
+	OutputDebugStringA(pstrFileName);
+	OutputDebugStringA("\n");
+
+	// FBX SDK Manager 생성
+	FbxManager* pFbxManager = FbxManager::Create();
+	if (!pFbxManager) {
+		OutputDebugStringA("Error: Unable to create FBX Manager!\n");
+		return;
+	}
+
+	// IOSettings 생성
+	FbxIOSettings* pIOSettings = FbxIOSettings::Create(pFbxManager, IOSROOT);
+	pFbxManager->SetIOSettings(pIOSettings);
+
+	// Importer 생성
+	FbxImporter* pImporter = FbxImporter::Create(pFbxManager, "");
+	if (!pImporter->Initialize(pstrFileName, -1, pFbxManager->GetIOSettings())) {
+		OutputDebugStringA("Error: FBX Importer Initialize failed!\n");
+		OutputDebugStringA(pImporter->GetStatus().GetErrorString());
+		OutputDebugStringA("\n");
+		pFbxManager->Destroy();
+		return;
+	}
+
+	// Scene 생성 및 Import
+	FbxScene* pScene = FbxScene::Create(pFbxManager, "myScene");
+	pImporter->Import(pScene);
+	pImporter->Destroy();
+
+	OutputDebugStringA("FBX Scene loaded successfully\n");
+
+	// 삼각형화 (Triangulate)
+	FbxGeometryConverter geometryConverter(pFbxManager);
+	geometryConverter.Triangulate(pScene, true);
+
+	// 메쉬 처리
+	std::vector<CDiffusedVertex> vertices;
+	std::vector<UINT> indices;
+
+	FbxNode* pRootNode = pScene->GetRootNode(); // <--- FIX: pRootNode 정의 추가
+
+	if (pRootNode) {
+		for (int i = 0; i < pRootNode->GetChildCount(); i++) {
+			ProcessNode(pRootNode->GetChild(i), vertices, indices, fScale, xmf4Color);
+		}
+	}
+	// FBX Manager 정리
+	pFbxManager->Destroy();
+
+	if (vertices.empty()) {
+		return;
+	}
+
+	m_nVertices = (UINT)vertices.size();
+	m_nStride = sizeof(CDiffusedVertex);
+	m_nOffset = 0;
+	m_nSlot = 0;
+	m_d3dPrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+	// 정점 버퍼 생성
+	m_pd3dVertexBuffer = ::CreateBufferResource(pd3dDevice, pd3dCommandList, vertices.data(),
+		m_nStride * m_nVertices, D3D12_HEAP_TYPE_DEFAULT,
+		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, &m_pd3dVertexUploadBuffer);
+
+	m_d3dVertexBufferView.BufferLocation = m_pd3dVertexBuffer->GetGPUVirtualAddress();
+	m_d3dVertexBufferView.StrideInBytes = m_nStride;
+	m_d3dVertexBufferView.SizeInBytes = m_nStride * m_nVertices;
+
+	// 인덱스 버퍼 생성
+	if (!indices.empty()) {
+		m_nIndices = (UINT)indices.size();
+		m_pd3dIndexBuffer = ::CreateBufferResource(pd3dDevice, pd3dCommandList, indices.data(),
+			sizeof(UINT) * m_nIndices, D3D12_HEAP_TYPE_DEFAULT,
+			D3D12_RESOURCE_STATE_INDEX_BUFFER, &m_pd3dIndexUploadBuffer);
+
+		m_d3dIndexBufferView.BufferLocation = m_pd3dIndexBuffer->GetGPUVirtualAddress();
+		m_d3dIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+		m_d3dIndexBufferView.SizeInBytes = sizeof(UINT) * m_nIndices;
+	}
+}
+
+CFBXMeshDiffused::~CFBXMeshDiffused() {}
+
+void CFBXMeshDiffused::ProcessNode(FbxNode* pNode, std::vector<CDiffusedVertex>& vertices, 
+	std::vector<UINT>& indices, float fScale, XMFLOAT4& xmf4Color) {
+	
+	FbxMesh* pMesh = pNode->GetMesh();
+	if (pMesh) {
+		ProcessMesh(pMesh, vertices, indices, fScale, xmf4Color);
+	}
+	
+	for (int i = 0; i < pNode->GetChildCount(); i++) {
+		ProcessNode(pNode->GetChild(i), vertices, indices, fScale, xmf4Color);
+	}
+}
+
+void CFBXMeshDiffused::ProcessMesh(FbxMesh* pMesh, std::vector<CDiffusedVertex>& vertices, 
+	std::vector<UINT>& indices, float fScale, XMFLOAT4& xmf4Color) {
+	
+	UINT baseVertex = (UINT)vertices.size();
+	
+	FbxVector4* pControlPoints = pMesh->GetControlPoints();
+	FbxGeometryElementVertexColor* pVertexColor = pMesh->GetElementVertexColor();
+	
+	int nPolygonCount = pMesh->GetPolygonCount();
+	int vertexCounter = 0;
+	
+	for (int i = 0; i < nPolygonCount; i++) {
+		int nPolygonSize = pMesh->GetPolygonSize(i);
+		
+		for (int j = 0; j < nPolygonSize; j++) {
+			int nControlPointIndex = pMesh->GetPolygonVertex(i, j);
+			
+			XMFLOAT3 position;
+			position.x = (float)pControlPoints[nControlPointIndex][0] * fScale;
+			position.y = (float)pControlPoints[nControlPointIndex][1] * fScale;
+			position.z = (float)pControlPoints[nControlPointIndex][2] * fScale;
+			
+			XMFLOAT4 color = xmf4Color;
+			if (pVertexColor) {
+				FbxColor fbxColor;
+				switch (pVertexColor->GetMappingMode()) {
+				case FbxGeometryElement::eByControlPoint:
+					if (pVertexColor->GetReferenceMode() == FbxGeometryElement::eDirect) {
+						fbxColor = pVertexColor->GetDirectArray().GetAt(nControlPointIndex);
+					}
+					else if (pVertexColor->GetReferenceMode() == FbxGeometryElement::eIndexToDirect) {
+						int id = pVertexColor->GetIndexArray().GetAt(nControlPointIndex);
+						fbxColor = pVertexColor->GetDirectArray().GetAt(id);
+					}
+					break;
+				case FbxGeometryElement::eByPolygonVertex:
+					if (pVertexColor->GetReferenceMode() == FbxGeometryElement::eDirect) {
+						fbxColor = pVertexColor->GetDirectArray().GetAt(vertexCounter);
+					}
+					else if (pVertexColor->GetReferenceMode() == FbxGeometryElement::eIndexToDirect) {
+						int id = pVertexColor->GetIndexArray().GetAt(vertexCounter);
+						fbxColor = pVertexColor->GetDirectArray().GetAt(id);
+					}
+					break;
+				}
+				color.x = (float)fbxColor.mRed;
+				color.y = (float)fbxColor.mGreen;
+				color.z = (float)fbxColor.mBlue;
+				color.w = (float)fbxColor.mAlpha;
+			}
+			
+			vertices.push_back(CDiffusedVertex(position, color));
+			indices.push_back(baseVertex + vertexCounter);
+			vertexCounter++;
+		}
+	}
+}
+//=============================================================================
+// FBX SDK를 사용한 UV 좌표 지원 FBX 메쉬 생성
+//=============================================================================
+CFBXMeshTextured::CFBXMeshTextured(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList,
+	const char* pstrFileName, float fScale) : CMesh(pd3dDevice, pd3dCommandList) {
+
+	m_pd3dDevice = pd3dDevice;
+	m_pd3dCommandList = pd3dCommandList;
+	m_fScale = fScale;
+
+	OutputDebugStringA("=== CFBXMeshTextured Constructor START ===\n");
+	OutputDebugStringA("File: ");
+	OutputDebugStringA(pstrFileName);
+	OutputDebugStringA("\n");
+
+	FbxManager* pFbxManager = FbxManager::Create();
+	if (!pFbxManager) {
+		OutputDebugStringA("Error: Unable to create FBX Manager!\n");
+		return;
+	}
+
+	FbxIOSettings* pIOSettings = FbxIOSettings::Create(pFbxManager, IOSROOT);
+	pFbxManager->SetIOSettings(pIOSettings);
+
+	FbxImporter* pImporter = FbxImporter::Create(pFbxManager, "");
+	if (!pImporter->Initialize(pstrFileName, -1, pFbxManager->GetIOSettings())) {
+		OutputDebugStringA("Error: FBX Importer Initialize failed!\n");
+		OutputDebugStringA(pImporter->GetStatus().GetErrorString());
+		OutputDebugStringA("\n");
+		pFbxManager->Destroy();
+		return;
+	}
+
+	FbxScene* pScene = FbxScene::Create(pFbxManager, "myScene");
+	pImporter->Import(pScene);
+	pImporter->Destroy();
+
+	OutputDebugStringA("FBX Scene loaded successfully\n");
+
+	FbxGeometryConverter geometryConverter(pFbxManager);
+	geometryConverter.Triangulate(pScene, true);
+
+	std::vector<CTexturedNormalVertex> vertices;
+	std::vector<UINT> indices;
+
+	FbxNode* pRootNode = pScene->GetRootNode();
+	if (pRootNode) {
+		for (int i = 0; i < pRootNode->GetChildCount(); i++) {
+			ProcessNode(pRootNode->GetChild(i), vertices, indices, fScale);
+		}
+	}
+
+	pFbxManager->Destroy();
+
+	if (vertices.empty()) {
+		OutputDebugStringA("Warning: No vertices loaded from FBX!\n");
+		return;
+	}
+
+	char buffer[256];
+	sprintf_s(buffer, "Loaded %zu vertices, %zu indices, %zu submeshes\n", 
+		vertices.size(), indices.size(), m_vSubMeshes.size());
+	OutputDebugStringA(buffer);
+
+	// 서브메쉬 정보 출력
+	for (size_t i = 0; i < m_vSubMeshes.size(); i++) {
+		sprintf_s(buffer, "  SubMesh[%zu]: %s (start=%u, count=%u)\n", 
+			i, m_vSubMeshes[i].strName.c_str(), m_vSubMeshes[i].nStartIndex, m_vSubMeshes[i].nIndexCount);
+		OutputDebugStringA(buffer);
+	}
+
+	m_nVertices = (UINT)vertices.size();
+	m_nStride = sizeof(CTexturedNormalVertex);
+	m_nOffset = 0;
+	m_nSlot = 0;
+	m_d3dPrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+	m_pd3dVertexBuffer = ::CreateBufferResource(pd3dDevice, pd3dCommandList, vertices.data(),
+		m_nStride * m_nVertices, D3D12_HEAP_TYPE_DEFAULT,
+		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, &m_pd3dVertexUploadBuffer);
+
+	m_d3dVertexBufferView.BufferLocation = m_pd3dVertexBuffer->GetGPUVirtualAddress();
+	m_d3dVertexBufferView.StrideInBytes = m_nStride;
+	m_d3dVertexBufferView.SizeInBytes = m_nStride * m_nVertices;
+
+	if (!indices.empty()) {
+		m_nIndices = (UINT)indices.size();
+		m_pd3dIndexBuffer = ::CreateBufferResource(pd3dDevice, pd3dCommandList, indices.data(),
+			sizeof(UINT) * m_nIndices, D3D12_HEAP_TYPE_DEFAULT,
+			D3D12_RESOURCE_STATE_INDEX_BUFFER, &m_pd3dIndexUploadBuffer);
+
+		m_d3dIndexBufferView.BufferLocation = m_pd3dIndexBuffer->GetGPUVirtualAddress();
+		m_d3dIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+		m_d3dIndexBufferView.SizeInBytes = sizeof(UINT) * m_nIndices;
+	}
+
+	OutputDebugStringA("=== CFBXMeshTextured Constructor END ===\n");
+}
+
+CFBXMeshTextured::~CFBXMeshTextured() {}
+
+void CFBXMeshTextured::ProcessNode(FbxNode* pNode, std::vector<CTexturedNormalVertex>& vertices,
+	std::vector<UINT>& indices, float fScale) {
+
+	FbxMesh* pMesh = pNode->GetMesh();
+	if (pMesh) {
+		ProcessMesh(pNode, pMesh, vertices, indices, fScale);
+	}
+
+	for (int i = 0; i < pNode->GetChildCount(); i++) {
+		ProcessNode(pNode->GetChild(i), vertices, indices, fScale);
+	}
+}
+
+void CFBXMeshTextured::ProcessMesh(FbxNode* pNode, FbxMesh* pMesh, std::vector<CTexturedNormalVertex>& vertices,
+	std::vector<UINT>& indices, float fScale) {
+
+	// 서브메쉬 정보 생성
+	SubMeshInfo subMesh;
+	subMesh.strName = pNode->GetName();
+	subMesh.nStartIndex = (UINT)indices.size();
+	subMesh.nMaterialIndex = -1;
+
+	char buffer[256];
+	sprintf_s(buffer, "Processing mesh: %s\n", subMesh.strName.c_str());
+	OutputDebugStringA(buffer);
+
+	UINT baseVertex = (UINT)vertices.size();
+	FbxVector4* pControlPoints = pMesh->GetControlPoints();
+
+	int nPolygonCount = pMesh->GetPolygonCount();
+	int vertexCounter = 0;
+
+	for (int i = 0; i < nPolygonCount; i++) {
+		int nPolygonSize = pMesh->GetPolygonSize(i);
+
+		for (int j = 0; j < nPolygonSize; j++) {
+			int nControlPointIndex = pMesh->GetPolygonVertex(i, j);
+
+			// 위치 추출
+			XMFLOAT3 position;
+			position.x = (float)pControlPoints[nControlPointIndex][0] * fScale;
+			position.y = (float)pControlPoints[nControlPointIndex][1] * fScale;
+			position.z = (float)pControlPoints[nControlPointIndex][2] * fScale;
+
+			// 노멀 추출
+			XMFLOAT3 normal = GetNormal(pMesh, nControlPointIndex, vertexCounter);
+
+			// UV 좌표 추출
+			XMFLOAT2 texCoord = GetUV(pMesh, nControlPointIndex, vertexCounter, 0);
+
+			vertices.push_back(CTexturedNormalVertex(position, normal, texCoord));
+			indices.push_back(baseVertex + vertexCounter);
+			vertexCounter++;
+		}
+	}
+
+	subMesh.nIndexCount = (UINT)indices.size() - subMesh.nStartIndex;
+	m_vSubMeshes.push_back(subMesh);
+
+	sprintf_s(buffer, "  -> %d polygons, %u indices\n", nPolygonCount, subMesh.nIndexCount);
+	OutputDebugStringA(buffer);
+}
+
+XMFLOAT2 CFBXMeshTextured::GetUV(FbxMesh* pMesh, int nControlPointIndex, int nVertexCounter, int nUVIndex) {
+	XMFLOAT2 texCoord = XMFLOAT2(0.0f, 0.0f);
+
+	if (pMesh->GetElementUVCount() <= nUVIndex) {
+		return texCoord;
+	}
+
+	FbxGeometryElementUV* pUV = pMesh->GetElementUV(nUVIndex);
+	if (!pUV) {
+		return texCoord;
+	}
+
+	FbxVector2 fbxUV;
+
+	switch (pUV->GetMappingMode()) {
+	case FbxGeometryElement::eByControlPoint:
+		switch (pUV->GetReferenceMode()) {
+		case FbxGeometryElement::eDirect:
+			fbxUV = pUV->GetDirectArray().GetAt(nControlPointIndex);
+			break;
+		case FbxGeometryElement::eIndexToDirect:
+			{
+				int id = pUV->GetIndexArray().GetAt(nControlPointIndex);
+				fbxUV = pUV->GetDirectArray().GetAt(id);
+			}
+			break;
+		default:
+			break;
+		}
+		break;
+
+	case FbxGeometryElement::eByPolygonVertex:
+		switch (pUV->GetReferenceMode()) {
+		case FbxGeometryElement::eDirect:
+			fbxUV = pUV->GetDirectArray().GetAt(nVertexCounter);
+			break;
+		case FbxGeometryElement::eIndexToDirect:
+			{
+				int id = pUV->GetIndexArray().GetAt(nVertexCounter);
+				fbxUV = pUV->GetDirectArray().GetAt(id);
+			}
+			break;
+		default:
+			break;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	texCoord.x = (float)fbxUV[0];
+	texCoord.y = 1.0f - (float)fbxUV[1];  // DirectX는 V좌표가 반전됨
+
+	return texCoord;
+}
+
+XMFLOAT3 CFBXMeshTextured::GetNormal(FbxMesh* pMesh, int nControlPointIndex, int nVertexCounter) {
+	XMFLOAT3 normal = XMFLOAT3(0.0f, 1.0f, 0.0f);
+
+	if (pMesh->GetElementNormalCount() < 1) {
+		return normal;
+	}
+
+	FbxGeometryElementNormal* pNormal = pMesh->GetElementNormal(0);
+	if (!pNormal) {
+		return normal;
+	}
+
+	FbxVector4 fbxNormal;
+
+	switch (pNormal->GetMappingMode()) {
+	case FbxGeometryElement::eByControlPoint:
+		switch (pNormal->GetReferenceMode()) {
+		case FbxGeometryElement::eDirect:
+			fbxNormal = pNormal->GetDirectArray().GetAt(nControlPointIndex);
+			break;
+		case FbxGeometryElement::eIndexToDirect:
+			{
+				int id = pNormal->GetIndexArray().GetAt(nControlPointIndex);
+				fbxNormal = pNormal->GetDirectArray().GetAt(id);
+			}
+			break;
+		default:
+			break;
+		}
+		break;
+
+	case FbxGeometryElement::eByPolygonVertex:
+		switch (pNormal->GetReferenceMode()) {
+		case FbxGeometryElement::eDirect:
+			fbxNormal = pNormal->GetDirectArray().GetAt(nVertexCounter);
+			break;
+		case FbxGeometryElement::eIndexToDirect:
+			{
+				int id = pNormal->GetIndexArray().GetAt(nVertexCounter);
+				fbxNormal = pNormal->GetDirectArray().GetAt(id);
+			}
+			break;
+		default:
+			break;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	normal.x = (float)fbxNormal[0];
+	normal.y = (float)fbxNormal[1];
+	normal.z = (float)fbxNormal[2];
+
+	return normal;
+}

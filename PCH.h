@@ -17,6 +17,7 @@
 #include <malloc.h>
 #include <memory.h>
 #include <tchar.h>
+#include <vector>
 
 #include <string>
 #include <wrl.h>
@@ -33,6 +34,13 @@
 #include <DirectXCollision.h>
 
 #include <DXGIDebug.h>
+
+// FBX SDK 이용한 3D 모델 로딩
+#include <fbxsdk.h>
+
+// WIC를 이용한 텍스처 로딩
+#include <wincodec.h>
+#pragma comment(lib, "windowscodecs.lib")
 
 using namespace DirectX;
 using namespace DirectX::PackedVector;
